@@ -10,20 +10,19 @@ from omegaconf import DictConfig
 import rofunc as rf
 
 from rofunc.config.utils import get_config
-from rofunc.planning_control.lqr.ilqr import fk, f_reach, get_matrices, set_dynamical_system
+from rofunc.planning_control.lqr.ilqr import iLQR
 from rofunc.planning_control.lqr.ilqr_com import fkin0
-from rofunc.planning_control.lqt.lqt_cp import define_control_primitive
-
 
 def get_u_x(cfg: DictConfig, Mu: np.ndarray, Rot: np.ndarray, u: np.ndarray, x0: np.ndarray, Q: np.ndarray,
             R: np.ndarray, Su0: np.ndarray, Sx0: np.ndarray, idx: np.ndarray, tl: np.ndarray, PSI):
     Su = Su0[idx.flatten()]  # We remove the lines that are out of interest
 
+    ilqr = iLQR(cfg)
     for i in range(cfg.nbIter):
         x = np.real(Su0 @ u + Sx0 @ x0)
         x = x.reshape([cfg.nbData, cfg.nbVarX])
 
-        f, J = f_reach(cfg, x[tl], Mu, Rot)
+        f, J = ilqr.f_reach(x[tl], Mu, Rot)
         dw = np.linalg.inv(PSI.T @ Su.T @ J.T @ Q @ J @ Su @ PSI + PSI.T @ R @ PSI) @ (
                 -PSI.T @ Su.T @ J.T @ Q @ f.flatten() - PSI.T @ u * cfg.rfactor)
         du = PSI @ dw
@@ -35,7 +34,7 @@ def get_u_x(cfg: DictConfig, Mu: np.ndarray, Rot: np.ndarray, u: np.ndarray, x0:
             utmp = u + du * alpha
             xtmp = np.real(Su0 @ utmp + Sx0 @ x0)
             xtmp = xtmp.reshape([cfg.nbData, cfg.nbVarX])
-            ftmp, _ = f_reach(cfg, xtmp[tl], Mu, Rot)
+            ftmp, _ = ilqr.f_reach(xtmp[tl], Mu, Rot)
             cost = ftmp.flatten() @ Q @ ftmp.flatten() + np.linalg.norm(utmp) * cfg.rfactor
 
             if cost < cost0 or alpha < 1e-3:
@@ -51,21 +50,24 @@ def get_u_x(cfg: DictConfig, Mu: np.ndarray, Rot: np.ndarray, u: np.ndarray, x0:
 
 
 def uni_cp(Mu, Rot, u0, x0, cfg, for_test=False):
-    Q, R, idx, tl = get_matrices(cfg)
-    PSI, phi = define_control_primitive(cfg)
-    Su0, Sx0 = set_dynamical_system(cfg)
+    ilqr = iLQR(cfg)
+    Q, R, idx, tl = ilqr.get_matrices()
+
+    PSI, phi = ilqr.define_control_primitive()
+    Su0, Sx0 = ilqr.set_dynamical_system()
 
     u, x = get_u_x(cfg, Mu, Rot, u0, x0, Q, R, Su0, Sx0, idx, tl, PSI)
     vis(cfg, u, x, Mu, Rot, tl, phi, for_test=for_test)
 
 
 def vis(cfg, u, x, Mu, Rot, tl, phi, for_test):
+    ilqr = iLQR(cfg)
     plt.figure()
     plt.axis("off")
     plt.gca().set_aspect('equal', adjustable='box')
 
     # Get points of interest
-    f = fk(cfg, x)
+    f = ilqr.fk(x)
     f00 = fkin0(cfg, x[0])
     f10 = fkin0(cfg, x[tl[0]])
     fT0 = fkin0(cfg, x[-1])
@@ -84,7 +86,7 @@ def vis(cfg, u, x, Mu, Rot, tl, phi, for_test):
         if cfg.useBoundingBox:
             rect_origin = Mu[t, :2] - Rot[t, :, :] @ np.array(cfg.sz)
             rect_orn = Mu[t, -1]
-            rect = patches.Rectangle(rect_origin, cfg.sz[0] * 2, cfg.sz[1] * 2, np.degrees(rect_orn),
+            rect = patches.Rectangle(xy=rect_origin, width=cfg.sz[0] * 2, height=cfg.sz[1] * 2, angle=np.degrees(rect_orn),
                                      color=color_map[t])
             ax.add_patch(rect)
         else:

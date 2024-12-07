@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from rofunc.planning_control.lqr.ilqr import get_matrices, set_dynamical_system
+from rofunc.planning_control.lqr.ilqr import iLQR
 from rofunc.config.utils import get_config
 from omegaconf import DictConfig
 
@@ -89,8 +89,9 @@ def get_u_x(cfg: DictConfig, Mu: np.ndarray, Obst: np.ndarray, U_obst: np.ndarra
 
 
 def uni_obstacle(Mu, Obst, S_obst, U_obst, u0, x0, cfg, for_test=False):
-    Q, R, idx, tl = get_matrices(cfg)
-    Su0, Sx0 = set_dynamical_system(cfg)
+    ilqr = iLQR(cfg)
+    Q, R, idx, tl = ilqr.get_matrices()
+    Su0, Sx0 = ilqr.set_dynamical_system()
 
     u, x = get_u_x(cfg, Mu, Obst, U_obst, u0, x0, R, Su0, Sx0, idx, tl)
     vis(cfg, x, Mu, Obst, S_obst, for_test=for_test)

@@ -9,7 +9,7 @@ import rofunc as rf
 
 rf.logger.beauty_print("########## Inverse kinematics from URDF or MuJoCo XML files with RobotModel class ##########")
 rf.logger.beauty_print("---------- Inverse kinematics for Franka Panda using URDF file ----------")
-model_path = "../../rofunc/simulator/assets/urdf/franka_description/robots/franka_panda.urdf"
+model_path = "./rofunc/simulator/assets/urdf/franka_description/robots/franka_panda.urdf"
 
 ee_pose = [0, 0, 0, 0, 0, 0, 1]
 export_link = "panda_hand"

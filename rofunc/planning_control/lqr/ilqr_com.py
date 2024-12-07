@@ -1,16 +1,15 @@
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
-import numpy.matlib
 from omegaconf import DictConfig
 
 from rofunc.config.utils import get_config
-from rofunc.planning_control.lqr.ilqr import get_matrices, set_dynamical_system
+from rofunc.planning_control.lqr.ilqr import iLQR
 
 
 def fkin0(cfg, x):
     T = np.tril(np.ones([cfg.nbVarX, cfg.nbVarX]))
-    T2 = np.tril(np.matlib.repmat(cfg.l, len(x), 1))
+    T2 = np.tile(cfg.l, (len(x), 1))
     f = np.vstack((
         T2 @ np.cos(T @ x),
         T2 @ np.sin(T @ x)
@@ -108,9 +107,10 @@ def get_u_x(cfg: DictConfig, Mu: np.ndarray, MuCoM: np.ndarray, u: np.ndarray, x
 
 
 def uni_com(Mu, MuCoM, u0, x0, cfg, for_test=False):
-    Q, R, idx, tl = get_matrices(cfg)
+    ilqr = iLQR(cfg)
+    Q, R, idx, tl = ilqr.get_matrices()
     Qc = np.kron(np.identity(cfg.nbData), np.diag([1E0, 0]))
-    Su0, Sx0 = set_dynamical_system(cfg)
+    Su0, Sx0 = ilqr.set_dynamical_system()
     u, x = get_u_x(cfg, Mu, MuCoM, u0, x0, Q, Qc, R, Su0, Sx0, idx, tl)
 
     vis(cfg, x, Mu, MuCoM, for_test=for_test)

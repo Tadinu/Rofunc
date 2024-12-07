@@ -4,7 +4,7 @@ import numpy as np
 from omegaconf import DictConfig
 
 from rofunc.config.utils import get_config
-from rofunc.planning_control.lqr.ilqr import fk, fkin0, f_reach, set_dynamical_system
+from rofunc.planning_control.lqr.ilqr import iLQR
 
 
 def forward_dynamics(cfg, x, u):
@@ -95,7 +95,7 @@ def get_matrices(cfg: DictConfig):
     return Q, R, idx, tl
 
 
-def get_u_x(cfg: DictConfig, Mu: np.ndarray, Rot: np.ndarray, u: np.ndarray, x0: np.ndarray, v0: np.ndarray,
+def get_u_x(ilqr: iLQR, cfg: DictConfig, Mu: np.ndarray, Rot: np.ndarray, u: np.ndarray, x0: np.ndarray, v0: np.ndarray,
             Q: np.ndarray, R: np.ndarray, idx: np.ndarray, tl: np.ndarray):
     x = np.zeros([cfg.nbData, 2 * cfg.nbVarX, ])
     x[0, :cfg.nbVarX] = x0
@@ -106,7 +106,7 @@ def get_u_x(cfg: DictConfig, Mu: np.ndarray, Rot: np.ndarray, u: np.ndarray, x0:
         x, Su0 = forward_dynamics(cfg, x, u)
         Su = Su0[idx.flatten()]
 
-        f, J = f_reach(cfg, x[tl, :cfg.nbVarX], Mu, Rot)
+        f, J = ilqr.f_reach(x[tl, :cfg.nbVarX], Mu, Rot)
         du = np.linalg.inv(Su.T @ J.T @ Q @ J @ Su + R) @ (-Su.T @ J.T @ Q @ f.flatten() - u * cfg.rfactor)
 
         # Perform line search
@@ -116,7 +116,7 @@ def get_u_x(cfg: DictConfig, Mu: np.ndarray, Rot: np.ndarray, u: np.ndarray, x0:
         while True:
             utmp = u + du * alpha
             xtmp, _ = forward_dynamics(cfg, x, utmp)
-            ftmp, _ = f_reach(cfg, xtmp[tl, :cfg.nbVarX], Mu, Rot)
+            ftmp, _ = ilqr.f_reach(xtmp[tl, :cfg.nbVarX], Mu, Rot)
             cost = ftmp.flatten() @ Q @ ftmp.flatten() + np.linalg.norm(utmp) * cfg.rfactor
 
             if cost < cost0 or alpha < 1e-3:
@@ -130,21 +130,22 @@ def get_u_x(cfg: DictConfig, Mu: np.ndarray, Rot: np.ndarray, u: np.ndarray, x0:
 
 
 def uni_dyna(Mu, Rot, u0, x0, v0, cfg, for_test=False):
+    ilqr = iLQR(cfg)
     Q, R, idx, tl = get_matrices(cfg)
-    Su0, Sx0 = set_dynamical_system(cfg)
-    u, x = get_u_x(cfg, Mu, Rot, u0, x0, v0, Q, R, idx, tl)
-    vis(cfg, Mu, Rot, x, tl, for_test=for_test)
+    Su0, Sx0 = ilqr.set_dynamical_system()
+    u, x = get_u_x(ilqr, cfg, Mu, Rot, u0, x0, v0, Q, R, idx, tl)
+    vis(ilqr, cfg, Mu, Rot, x, tl, for_test=for_test)
 
 
-def vis(cfg, Mu, Rot, x, tl, for_test):
+def vis(ilqr, cfg, Mu, Rot, x, tl, for_test):
     plt.figure()
     plt.axis("off")
     plt.gca().set_aspect('equal', adjustable='box')
 
     # Get points of interest
-    f = fk(cfg, x[:, :cfg.nbVarX])
-    f00 = fkin0(cfg, x[0, :cfg.nbVarX])
-    fT0 = fkin0(cfg, x[-1, :cfg.nbVarX])
+    f = ilqr.fk(x[:, :cfg.nbVarX])
+    f00 = ilqr.fkin0(x[0, :cfg.nbVarX])
+    fT0 = ilqr.fkin0(x[-1, :cfg.nbVarX])
 
     plt.plot(f00[:, 0], f00[:, 1], c='black', linewidth=5, alpha=.2)
     plt.plot(fT0[:, 0], fT0[:, 1], c='black', linewidth=5, alpha=.6)
@@ -160,8 +161,8 @@ def vis(cfg, Mu, Rot, x, tl, for_test):
             rect_origin = Mu[i, :2] - Rot[i] @ np.array(cfg.sz)
             rect_orn = Mu[i, -1]
 
-            rect = patches.Rectangle(rect_origin, cfg.sz[0] * 2, cfg.sz[1] * 2,
-                                     np.degrees(rect_orn), color=color_map[i])
+            rect = patches.Rectangle(xy=rect_origin, width=cfg.sz[0] * 2, height=cfg.sz[1] * 2,
+                                     angle=np.degrees(rect_orn), color=color_map[i])
             ax.add_patch(rect)
         else:
             plt.scatter(Mu[i, 0], Mu[i, 1], s=100, marker="X", c=color_map[i])

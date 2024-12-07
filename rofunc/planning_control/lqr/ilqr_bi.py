@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from rofunc.planning_control.lqr.ilqr import set_dynamical_system
+from rofunc.planning_control.lqr.ilqr import iLQR
 from rofunc.config.utils import get_config
 from omegaconf import DictConfig
 
@@ -144,8 +144,9 @@ def get_u_x(cfg: DictConfig, Mu: np.ndarray, MuCoM: np.ndarray, u: np.ndarray, x
 
 
 def uni_bi(Mu, MuCoM, u0, x0, cfg, for_test=False):
+    ilqr = iLQR(cfg)
     Q, Qc, R, idx, tl = get_matrices(cfg)
-    Su0, Sx0 = set_dynamical_system(cfg)
+    Su0, Sx0 = ilqr.set_dynamical_system()
     u, x = get_u_x(cfg, Mu, MuCoM, u0, x0, Q, Qc, R, Su0, Sx0, idx, tl)
 
     vis(cfg, x, Mu, MuCoM, tl, for_test=for_test)

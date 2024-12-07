@@ -6,6 +6,7 @@
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
+import rofunc as rf
 from rofunc.config.utils import get_config
 from omegaconf import DictConfig
 
@@ -13,6 +14,17 @@ from omegaconf import DictConfig
 class iLQR:
     def __init__(self, cfg):
         self.cfg = cfg
+
+    def define_control_primitive(self):
+        functions = {
+            "PIECEWISE": rf.primitive.build_phi_piecewise,
+            "RBF": rf.primitive.build_phi_rbf,
+            "BERNSTEIN": rf.primitive.build_phi_bernstein,
+            "FOURIER": rf.primitive.build_phi_fourier
+        }
+        phi = functions[self.cfg.basisName](self.cfg.nbData - 1, self.cfg.nbFct)
+        PSI = np.kron(phi, np.identity(self.cfg.nbVarPos))
+        return PSI, phi
 
     def logmap_2d(self, f, f0):
         position_error = f[:, :2] - f0[:, :2]
@@ -168,7 +180,8 @@ class iLQR:
             if self.cfg.useBoundingBox:
                 rect_origin = Mu[t, :2] - Rot[t, :, :] @ np.array(self.cfg.sz)
                 rect_orn = Mu[t, -1]
-                rect = patches.Rectangle(rect_origin, self.cfg.sz[0] * 2, self.cfg.sz[1] * 2, np.degrees(rect_orn),
+                rect = patches.Rectangle(xy=rect_origin, width=self.cfg.sz[0] * 2, height=self.cfg.sz[1] * 2,
+                                         angle=np.degrees(rect_orn),
                                          color=color_map[t])
                 ax.add_patch(rect)
             else:
